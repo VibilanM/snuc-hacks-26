@@ -1,4 +1,5 @@
 import { getJson } from "serpapi";
+import supabase from "../db/supabase.js";
 
 const SERPAPI_KEY = "b48662dff83bec42b41f6eac6ff8f1cd25dd37c332395773f303d48ccd2fca00";
 
@@ -95,11 +96,38 @@ const searchCompetitors = async (req, res) => {
             const reviewResults = reviewResponse.organic_results || [];
             const discussionResults = discussionResponse.organic_results || [];
 
-            competitors.push({
-                name,
+            const competitorUrls = {
                 official_site: siteResults[0]?.link || "Not found",
                 reviews: reviewResults[0]?.link || "Not found",
                 discussions: discussionResults[0]?.link || "Not found",
+            };
+
+            // Update database
+            const { data: competitorData, error: competitorError } = await supabase
+                .from('competitors')
+                .insert([{ name, domain: product, industry }])
+                .select()
+                .single();
+
+            if (competitorError) {
+                console.error(`Error inserting competitor ${name}:`, competitorError.message);
+            } else if (competitorData) {
+                const { error: sourceError } = await supabase
+                    .from('sources')
+                    .insert([{
+                        competitor_id: competitorData.id,
+                        type: 'initial',
+                        urls: competitorUrls
+                    }]);
+
+                if (sourceError) {
+                    console.error(`Error inserting source for ${name}:`, sourceError.message);
+                }
+            }
+
+            competitors.push({
+                name,
+                ...competitorUrls
             });
         }
 
