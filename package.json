@@ -16,6 +16,7 @@
     "cheerio": "^1.2.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "google-search-results-nodejs": "^2.1.0"
+    "google-search-results-nodejs": "^2.1.0",
+    "serpapi": "^2.2.1"
   }
 }
