@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import supabase from "./db/supabase.js";
 import inputRoutes from "./routes/inputRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
@@ -10,6 +11,7 @@ import insightRoutes from "./routes/insightRoutes.js";
 
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
