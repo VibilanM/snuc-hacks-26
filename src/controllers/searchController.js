@@ -1,7 +1,7 @@
 import { getJson } from "serpapi";
 import supabase from "../db/supabase.js";
 
-const SERPAPI_KEY = "b48662dff83bec42b41f6eac6ff8f1cd25dd37c332395773f303d48ccd2fca00";
+const SERPAPI_KEY = process.env.SERPAPI_KEY;
 
 /**
  * Helper: run a Google search via SerpAPI and return the full response.
