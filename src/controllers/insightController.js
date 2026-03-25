@@ -4,22 +4,16 @@ import supabase from "../db/supabase.js";
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const LLM_MODEL = "llama-3.1-8b-instant";
 
-/**
- * Extract a JSON object from a string that may contain surrounding text.
- */
 function extractJSON(text) {
-    // Try direct parse first
     try {
         return JSON.parse(text);
     } catch {}
 
-    // Strip markdown code fences
     let cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
     try {
         return JSON.parse(cleaned);
     } catch {}
 
-    // Find the first { and last } to extract embedded JSON
     const firstBrace = cleaned.indexOf("{");
     const lastBrace = cleaned.lastIndexOf("}");
     if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -32,10 +26,6 @@ function extractJSON(text) {
     return null;
 }
 
-/**
- * Call Groq LLM and return parsed JSON response.
- * Retries once if the response is not valid JSON.
- */
 async function callLLM(prompt, retries = 1) {
     for (let attempt = 0; attempt <= retries; attempt++) {
         try {
@@ -77,17 +67,12 @@ async function callLLM(prompt, retries = 1) {
     }
 }
 
-/**
- * POST /insights/generate
- * For each competitor: generate insights from changes+trends, then recommendations per insight.
- */
 const generateInsights = async (req, res) => {
     try {
         if (!GROQ_API_KEY) {
             return res.status(500).json({ error: "GROQ_API_KEY not configured in .env" });
         }
 
-        // Fetch all changes grouped by competitor_id
         const { data: changes, error: changesErr } = await supabase
             .from("changes")
             .select("*")
@@ -98,7 +83,6 @@ const generateInsights = async (req, res) => {
             return res.status(500).json({ error: "Failed to fetch changes." });
         }
 
-        // Fetch all trends
         const { data: trends, error: trendsErr } = await supabase
             .from("trends")
             .select("*");
@@ -108,7 +92,6 @@ const generateInsights = async (req, res) => {
             return res.status(500).json({ error: "Failed to fetch trends." });
         }
 
-        // Group changes by competitor_id
         const changesByCompetitor = {};
         for (const change of (changes || [])) {
             if (!changesByCompetitor[change.competitor_id]) {
@@ -122,14 +105,12 @@ const generateInsights = async (req, res) => {
             });
         }
 
-        // Format trends
         const formattedTrends = (trends || []).map(t => ({
             keyword: t.keyword,
             frequency: t.frequency,
             trend_direction: t.trend_direction,
         }));
 
-        // Get distinct competitor IDs (from changes + from competitors table)
         const { data: allCompetitors } = await supabase
             .from("competitors")
             .select("id, name");
@@ -146,15 +127,6 @@ const generateInsights = async (req, res) => {
             const competitorChanges = changesByCompetitor[competitorId] || [];
             const competitorName = allCompetitors?.find(c => c.id === competitorId)?.name || "Unknown";
 
-            // Build LLM input
-            const llmInput = {
-                competitor_id: competitorId,
-                competitor_name: competitorName,
-                changes: competitorChanges,
-                trends: formattedTrends,
-            };
-
-            // STEP 2: Generate insight
             const insightPrompt = `Generate a concise business insight based on the provided competitor data.
 
 COMPETITOR: ${competitorName}
@@ -180,20 +152,15 @@ RULES:
 - score must be between 0 and 1 based on importance`;
 
             console.log(`[insights] Generating insight for ${competitorName}...`);
-            const insightResult = callLLM(insightPrompt);
-
-            // While waiting, prepare recommendation generation
-            const insight = await insightResult;
+            const insight = await callLLM(insightPrompt);
 
             if (!insight || !insight.insight_text || !insight.insight_type) {
                 console.error(`[insights] Invalid insight for ${competitorName}, skipping.`);
                 continue;
             }
 
-            // Clamp score
             insight.score = Math.max(0, Math.min(1, parseFloat(insight.score) || 0.5));
 
-            // STEP 3: Store insight
             const { data: insertedInsight, error: insightErr } = await supabase
                 .from("insights")
                 .insert([{
@@ -213,7 +180,6 @@ RULES:
             insightsCreated++;
             console.log(`[insights] Insight stored for ${competitorName}: ${insight.insight_type}`);
 
-            // STEP 4: Generate recommendation
             const recPrompt = `Generate an actionable recommendation based on the given insight.
 
 INSIGHT: ${insight.insight_text}
@@ -245,10 +211,8 @@ RULES:
                 continue;
             }
 
-            // Clamp priority
             rec.priority = Math.max(0, Math.min(1, parseFloat(rec.priority) || 0.5));
 
-            // STEP 5: Store recommendation
             const { error: recErr } = await supabase
                 .from("recommendations")
                 .insert([{

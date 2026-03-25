@@ -1,13 +1,8 @@
 import supabase from "../db/supabase.js";
 import { scrapeOfficialSite, scrapeReviews, scrapeDiscussions } from "../utils/scraper.js";
 
-/**
- * POST /scrape-data
- * Fetches all rows from the sources table, scrapes each URL, and returns structured raw data.
- */
 const scrapeData = async (req, res) => {
     try {
-        // Fetch all source rows
         const { data: sources, error: dbError } = await supabase
             .from("sources")
             .select("*");
@@ -33,7 +28,6 @@ const scrapeData = async (req, res) => {
 
             const scraped = {};
 
-            // Scrape official site
             if (urls.official_site && urls.official_site !== "Not found") {
                 console.log(`Scraping official site: ${urls.official_site}`);
                 scraped.official_site = await scrapeOfficialSite(urls.official_site);
@@ -41,7 +35,6 @@ const scrapeData = async (req, res) => {
                 scraped.official_site = { error: "No URL available" };
             }
 
-            // Scrape reviews
             if (urls.reviews && urls.reviews !== "Not found") {
                 console.log(`Scraping reviews: ${urls.reviews}`);
                 scraped.reviews = await scrapeReviews(urls.reviews);
@@ -49,7 +42,6 @@ const scrapeData = async (req, res) => {
                 scraped.reviews = { error: "No URL available" };
             }
 
-            // Scrape discussions
             if (urls.discussions && urls.discussions !== "Not found") {
                 console.log(`Scraping discussions: ${urls.discussions}`);
                 scraped.discussions = await scrapeDiscussions(urls.discussions);

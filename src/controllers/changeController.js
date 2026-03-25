@@ -2,7 +2,6 @@ import supabase from "../db/supabase.js";
 
 const DEMO_MODE = process.env.DEMO_MODE === "true";
 
-// Demo mode mutation phrases
 const HEADLINE_MUTATIONS = [
     " — now with AI capabilities",
     " — next-gen platform",
@@ -27,16 +26,11 @@ const KEYWORD_MUTATIONS = [
     "security focus",
 ];
 
-/**
- * Apply subtle, random mutations to a snapshot for demo purposes.
- * Mutates in-place. Only changes 1-2 fields per call.
- */
 function applyDemoMutations(snapshot) {
     const mutated = { ...snapshot };
     const fieldsToMutate = Math.random() < 0.5 ? 1 : 2;
     const allFields = ["headline", "pricing", "features", "keywords"];
 
-    // Shuffle and pick
     const shuffled = allFields.sort(() => Math.random() - 0.5).slice(0, fieldsToMutate);
 
     for (const field of shuffled) {
@@ -50,7 +44,6 @@ function applyDemoMutations(snapshot) {
 
             case "pricing":
                 if (mutated.pricing) {
-                    // Try to find a dollar amount and tweak it
                     const match = mutated.pricing.match(/\$(\d+)/);
                     if (match) {
                         const oldPrice = parseInt(match[1]);
@@ -84,13 +77,9 @@ function applyDemoMutations(snapshot) {
     return mutated;
 }
 
-/**
- * Diff two snapshots and return an array of change objects.
- */
 function diffSnapshots(oldSnap, newSnap) {
     const changes = [];
 
-    // Headline diff
     if (oldSnap.headline !== newSnap.headline && newSnap.headline !== null) {
         changes.push({
             field: "headline",
@@ -100,7 +89,6 @@ function diffSnapshots(oldSnap, newSnap) {
         });
     }
 
-    // Pricing diff
     if (oldSnap.pricing !== newSnap.pricing && newSnap.pricing !== null) {
         changes.push({
             field: "pricing",
@@ -110,7 +98,6 @@ function diffSnapshots(oldSnap, newSnap) {
         });
     }
 
-    // Features diff (detect added items)
     if (Array.isArray(newSnap.features) && Array.isArray(oldSnap.features)) {
         const oldSet = new Set(oldSnap.features);
         const added = newSnap.features.filter(f => !oldSet.has(f));
@@ -133,7 +120,6 @@ function diffSnapshots(oldSnap, newSnap) {
         }
     }
 
-    // Keywords diff (detect added keywords)
     if (Array.isArray(newSnap.keywords) && Array.isArray(oldSnap.keywords)) {
         const oldSet = new Set(oldSnap.keywords);
         const added = newSnap.keywords.filter(k => !oldSet.has(k));
@@ -159,16 +145,10 @@ function diffSnapshots(oldSnap, newSnap) {
     return changes;
 }
 
-/**
- * POST /changes/detect
- * Compares latest two snapshots per (competitor_id, source_id),
- * detects changes, and stores them in the changes table.
- */
 const detectChanges = async (req, res) => {
     try {
         console.log(`[changes] DEMO_MODE: ${DEMO_MODE}`);
 
-        // Get all distinct (competitor_id, source_id) pairs from snapshots
         const { data: allSnapshots, error: fetchError } = await supabase
             .from("snapshots")
             .select("*")
@@ -183,7 +163,6 @@ const detectChanges = async (req, res) => {
             return res.status(404).json({ error: "No snapshots found." });
         }
 
-        // Group by (competitor_id, source_id)
         const groups = {};
         for (const snap of allSnapshots) {
             const key = `${snap.competitor_id}::${snap.source_id}`;
@@ -194,7 +173,6 @@ const detectChanges = async (req, res) => {
         const allDetails = [];
 
         for (const [key, snaps] of Object.entries(groups)) {
-            // Already sorted desc by captured_at
             let latest = snaps[0];
             const previous = snaps.length > 1 ? snaps[1] : null;
 
@@ -203,13 +181,11 @@ const detectChanges = async (req, res) => {
                 continue;
             }
 
-            // Apply demo mutations if enabled
             if (DEMO_MODE) {
                 console.log(`[changes] Applying demo mutations for ${key}`);
                 latest = applyDemoMutations(latest);
             }
 
-            // Diff
             const changes = diffSnapshots(previous, latest);
 
             if (changes.length === 0) {
@@ -217,9 +193,7 @@ const detectChanges = async (req, res) => {
                 continue;
             }
 
-            // Store each change
             for (const change of changes) {
-                // Check for duplicate to ensure idempotency
                 const { data: existing } = await supabase
                     .from("changes")
                     .select("id")

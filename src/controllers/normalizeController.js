@@ -2,9 +2,6 @@ import supabase from "../db/supabase.js";
 import { scrapeOfficialSite, scrapeReviews, scrapeDiscussions } from "../utils/scraper.js";
 import { normalizeData } from "../utils/normalizer.js";
 
-/**
- * Compute trend direction based on old and new frequency.
- */
 function computeTrendDirection(oldFreq, newFreq) {
     if (oldFreq === 0) return "steady growth";
     const ratio = newFreq / oldFreq;
@@ -15,16 +12,8 @@ function computeTrendDirection(oldFreq, newFreq) {
     return "decline";
 }
 
-/**
- * POST /normalize-data
- * 1. Fetches all sources from DB
- * 2. Scrapes each URL
- * 3. Normalizes text into keywords
- * 4. Updates the trends table
- */
 const normalizeAndComputeTrends = async (req, res) => {
     try {
-        // Step 1: Fetch all sources
         const { data: sources, error: dbError } = await supabase
             .from("sources")
             .select("*");
@@ -38,7 +27,6 @@ const normalizeAndComputeTrends = async (req, res) => {
             return res.status(404).json({ error: "No sources found in the database." });
         }
 
-        // Step 2: Scrape each source
         const scrapedData = [];
 
         for (const source of sources) {
@@ -71,11 +59,9 @@ const normalizeAndComputeTrends = async (req, res) => {
             scrapedData.push({ competitor_id, sources: scraped });
         }
 
-        // Step 3: Normalize into keywords
         const keywordFrequencies = normalizeData(scrapedData);
         console.log("[normalize] Extracted keywords:", keywordFrequencies);
 
-        // Step 4: Fetch existing trends
         const { data: existingTrends, error: trendsError } = await supabase
             .from("trends")
             .select("*");
@@ -94,10 +80,8 @@ const normalizeAndComputeTrends = async (req, res) => {
 
         const updatedTrends = [];
 
-        // Step 5: Update or insert trends
         for (const [keyword, newFreq] of Object.entries(keywordFrequencies)) {
             if (existingMap[keyword]) {
-                // CASE B: keyword exists → compute trend direction and update
                 const oldFreq = existingMap[keyword].frequency;
                 const trendDirection = computeTrendDirection(oldFreq, newFreq);
 
@@ -118,7 +102,6 @@ const normalizeAndComputeTrends = async (req, res) => {
                     updatedTrends.push(data);
                 }
             } else {
-                // CASE A (no rows) or new keyword: insert with "stable" or "steady growth"
                 const trendDirection = existingTrends && existingTrends.length > 0
                     ? "steady growth"
                     : "stable";

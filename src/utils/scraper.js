@@ -3,9 +3,6 @@ import * as cheerio from "cheerio";
 
 const TIMEOUT = 10000;
 
-/**
- * Fetch HTML content from a URL with timeout and error handling.
- */
 async function fetchHTML(url) {
     const response = await axios.get(url, {
         timeout: TIMEOUT,
@@ -18,23 +15,14 @@ async function fetchHTML(url) {
     return cheerio.load(response.data);
 }
 
-/**
- * Scrape an official website for key business information.
- */
 export async function scrapeOfficialSite(url) {
     try {
         const $ = await fetchHTML(url);
 
-        // Title
         const title = $("title").text().trim() || null;
-
-        // Meta description
         const meta_description = $('meta[name="description"]').attr("content")?.trim() || null;
-
-        // Main headline
         const headline = $("h1").first().text().trim() || null;
 
-        // Subheadings
         const subheadings = [];
         $("h2, h3").each((i, el) => {
             const text = $(el).text().trim();
@@ -43,7 +31,6 @@ export async function scrapeOfficialSite(url) {
             }
         });
 
-        // Pricing-related text
         let pricing_text = null;
         const pricingSelectors = [
             '[class*="pric"]', '[id*="pric"]',
@@ -56,7 +43,6 @@ export async function scrapeOfficialSite(url) {
                 break;
             }
         }
-        // Also look for dollar signs in text
         if (!pricing_text) {
             $("p, li, span, div").each((i, el) => {
                 const text = $(el).text().trim();
@@ -66,7 +52,6 @@ export async function scrapeOfficialSite(url) {
             });
         }
 
-        // Content snippets - first few meaningful paragraphs
         const content_snippets = [];
         $("p").each((i, el) => {
             const text = $(el).text().trim();
@@ -81,17 +66,12 @@ export async function scrapeOfficialSite(url) {
     }
 }
 
-/**
- * Scrape a reviews page for ratings and review snippets.
- */
 export async function scrapeReviews(url) {
     try {
         const $ = await fetchHTML(url);
 
-        // Title
         const title = $("title").text().trim() || null;
 
-        // Overall rating - look for common rating patterns
         let rating = null;
         const ratingSelectors = [
             '[class*="rating"]', '[class*="score"]', '[class*="star"]',
@@ -113,7 +93,6 @@ export async function scrapeReviews(url) {
             }
         }
 
-        // Review snippets
         const review_snippets = [];
         const reviewSelectors = [
             '[class*="review"]', '[class*="comment"]', '[class*="testimonial"]',
@@ -128,7 +107,6 @@ export async function scrapeReviews(url) {
             });
             if (review_snippets.length >= 3) break;
         }
-        // Fallback: grab paragraphs if no review elements found
         if (review_snippets.length === 0) {
             $("p").each((i, el) => {
                 const text = $(el).text().trim();
@@ -138,7 +116,6 @@ export async function scrapeReviews(url) {
             });
         }
 
-        // Pros and cons
         const pros_cons = [];
         $("h2, h3, h4, strong, b").each((i, el) => {
             const text = $(el).text().trim().toLowerCase();
@@ -152,7 +129,6 @@ export async function scrapeReviews(url) {
             }
         });
 
-        // Keywords: extract common words from visible text
         const bodyText = $("body").text().toLowerCase();
         const words = bodyText.match(/\b[a-z]{4,}\b/g) || [];
         const freq = {};
@@ -172,17 +148,12 @@ export async function scrapeReviews(url) {
     }
 }
 
-/**
- * Scrape a discussions/forum page for topics and comments.
- */
 export async function scrapeDiscussions(url) {
     try {
         const $ = await fetchHTML(url);
 
-        // Title
         const title = $("title").text().trim() || null;
 
-        // Discussion topics - look for common forum patterns
         const topics = [];
         const topicSelectors = [
             '[class*="topic"]', '[class*="thread"]', '[class*="post-title"]',
@@ -198,7 +169,6 @@ export async function scrapeDiscussions(url) {
             });
             if (topics.length >= 5) break;
         }
-        // Fallback: use headings
         if (topics.length === 0) {
             $("h1, h2, h3").each((i, el) => {
                 const text = $(el).text().trim();
@@ -208,7 +178,6 @@ export async function scrapeDiscussions(url) {
             });
         }
 
-        // Comments - look for comment-like elements
         const comments = [];
         const commentSelectors = [
             '[class*="comment"]', '[class*="reply"]', '[class*="post-body"]',
@@ -223,7 +192,6 @@ export async function scrapeDiscussions(url) {
             });
             if (comments.length >= 5) break;
         }
-        // Fallback: grab paragraphs
         if (comments.length === 0) {
             $("p").each((i, el) => {
                 const text = $(el).text().trim();

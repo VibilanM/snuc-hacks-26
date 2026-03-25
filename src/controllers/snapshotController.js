@@ -4,9 +4,6 @@ import { normalizeData } from "../utils/normalizer.js";
 
 const RAW_TEXT_LIMIT = 5000;
 
-/**
- * Combine all text from a source into a single string, limited in length.
- */
 function buildRawText(sourceData) {
     const parts = [];
     if (!sourceData || sourceData.error) return null;
@@ -25,9 +22,6 @@ function buildRawText(sourceData) {
     return combined.length > RAW_TEXT_LIMIT ? combined.substring(0, RAW_TEXT_LIMIT) : combined;
 }
 
-/**
- * Extract features array from official site data.
- */
 function extractFeatures(officialSite) {
     if (!officialSite || officialSite.error) return null;
     const features = [];
@@ -38,16 +32,11 @@ function extractFeatures(officialSite) {
     return features.length > 0 ? features : null;
 }
 
-/**
- * Extract keywords from scraped data for a single competitor.
- */
 function extractKeywordsForSource(scrapedSources, reviewData) {
-    // Use normalized keywords first
     const normalized = normalizeData([{ competitor_id: "temp", sources: scrapedSources }]);
     const normalizedKeys = Object.keys(normalized);
     if (normalizedKeys.length > 0) return [...new Set(normalizedKeys)];
 
-    // Fallback to review keywords
     if (reviewData && !reviewData.error && reviewData.keywords) {
         return [...new Set(reviewData.keywords)];
     }
@@ -55,13 +44,8 @@ function extractKeywordsForSource(scrapedSources, reviewData) {
     return null;
 }
 
-/**
- * POST /snapshots/create
- * Scrapes all sources, creates snapshot entries in the snapshots table.
- */
 const createSnapshots = async (req, res) => {
     try {
-        // Fetch all sources with their competitor_id and type
         const { data: sources, error: dbError } = await supabase
             .from("sources")
             .select("*");
@@ -75,7 +59,6 @@ const createSnapshots = async (req, res) => {
             return res.status(404).json({ error: "No sources found." });
         }
 
-        // Group sources by competitor_id
         const byCompetitor = {};
         for (const source of sources) {
             if (!byCompetitor[source.competitor_id]) {
@@ -87,12 +70,10 @@ const createSnapshots = async (req, res) => {
         const snapshotDetails = [];
 
         for (const [competitorId, competitorSources] of Object.entries(byCompetitor)) {
-            // Each competitor has one source row with urls jsonb
             for (const source of competitorSources) {
                 const { id: sourceId, urls } = source;
                 if (!urls) continue;
 
-                // Scrape all three URL types
                 const scraped = {};
 
                 if (urls.official_site && urls.official_site !== "Not found") {
@@ -116,7 +97,6 @@ const createSnapshots = async (req, res) => {
                     scraped.discussions = { error: "No URL available" };
                 }
 
-                // Build snapshot fields
                 const os = scraped.official_site || {};
 
                 const headline = (!os.error && os.headline)
@@ -131,7 +111,6 @@ const createSnapshots = async (req, res) => {
 
                 const keywords = extractKeywordsForSource(scraped, scraped.reviews);
 
-                // Build raw_text by combining all sources
                 const allParts = [
                     buildRawText(scraped.official_site),
                     buildRawText(scraped.reviews),
@@ -139,7 +118,6 @@ const createSnapshots = async (req, res) => {
                 ].filter(Boolean);
                 const raw_text = allParts.join(" ").substring(0, RAW_TEXT_LIMIT) || null;
 
-                // Insert snapshot (append-only, never update old ones)
                 const { data: snapshot, error: insertError } = await supabase
                     .from("snapshots")
                     .insert([{
