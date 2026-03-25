@@ -3,6 +3,7 @@ import supabase from "./db/supabase.js";
 import inputRoutes from "./routes/inputRoutes.js";
 import searchRoutes from "./routes/searchRoutes.js";
 import scrapeRoutes from "./routes/scrapeRoutes.js";
+import normalizeRoutes from "./routes/normalizeRoutes.js";
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.get("/", (req, res) => {
 app.use("/input", inputRoutes);
 app.use("/search", searchRoutes);
 app.use("/scrape-data", scrapeRoutes);
+app.use("/normalize-data", normalizeRoutes);
 
 app.listen(3000, () => {
     console.log("Server is running on port 3000");
