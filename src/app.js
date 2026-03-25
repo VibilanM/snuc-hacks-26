@@ -5,6 +5,7 @@ import searchRoutes from "./routes/searchRoutes.js";
 import scrapeRoutes from "./routes/scrapeRoutes.js";
 import normalizeRoutes from "./routes/normalizeRoutes.js";
 import snapshotRoutes from "./routes/snapshotRoutes.js";
+import changeRoutes from "./routes/changeRoutes.js";
 
 const app = express();
 
@@ -19,6 +20,7 @@ app.use("/search", searchRoutes);
 app.use("/scrape-data", scrapeRoutes);
 app.use("/normalize-data", normalizeRoutes);
 app.use("/snapshots", snapshotRoutes);
+app.use("/changes", changeRoutes);
 
 app.listen(3000, () => {
     console.log("Server is running on port 3000");
