@@ -1,82 +1,5 @@
 import supabase from "../db/supabase.js";
 
-const DEMO_MODE = process.env.DEMO_MODE === "true";
-
-const HEADLINE_MUTATIONS = [
-    " — now with AI capabilities",
-    " — next-gen platform",
-    " — powered by automation",
-    " — enterprise-ready",
-    " — reimagined for 2026",
-];
-
-const FEATURE_MUTATIONS = [
-    "AI-powered analytics",
-    "Smart email generation",
-    "Automated onboarding",
-    "Real-time collaboration engine",
-    "Advanced role-based access control",
-];
-
-const KEYWORD_MUTATIONS = [
-    "AI integration",
-    "automation",
-    "scalability",
-    "cost efficiency",
-    "security focus",
-];
-
-function applyDemoMutations(snapshot) {
-    const mutated = { ...snapshot };
-    const fieldsToMutate = Math.random() < 0.5 ? 1 : 2;
-    const allFields = ["headline", "pricing", "features", "keywords"];
-
-    const shuffled = allFields.sort(() => Math.random() - 0.5).slice(0, fieldsToMutate);
-
-    for (const field of shuffled) {
-        switch (field) {
-            case "headline":
-                if (mutated.headline) {
-                    const phrase = HEADLINE_MUTATIONS[Math.floor(Math.random() * HEADLINE_MUTATIONS.length)];
-                    mutated.headline = mutated.headline + phrase;
-                }
-                break;
-
-            case "pricing":
-                if (mutated.pricing) {
-                    const match = mutated.pricing.match(/\$(\d+)/);
-                    if (match) {
-                        const oldPrice = parseInt(match[1]);
-                        const delta = Math.random() < 0.5 ? -Math.floor(oldPrice * 0.1) : Math.floor(oldPrice * 0.15);
-                        const newPrice = Math.max(1, oldPrice + delta);
-                        mutated.pricing = mutated.pricing.replace(`$${oldPrice}`, `$${newPrice}`);
-                    }
-                }
-                break;
-
-            case "features":
-                if (Array.isArray(mutated.features)) {
-                    const newFeature = FEATURE_MUTATIONS[Math.floor(Math.random() * FEATURE_MUTATIONS.length)];
-                    if (!mutated.features.includes(newFeature)) {
-                        mutated.features = [...mutated.features, newFeature];
-                    }
-                }
-                break;
-
-            case "keywords":
-                if (Array.isArray(mutated.keywords)) {
-                    const newKw = KEYWORD_MUTATIONS[Math.floor(Math.random() * KEYWORD_MUTATIONS.length)];
-                    if (!mutated.keywords.includes(newKw)) {
-                        mutated.keywords = [...mutated.keywords, newKw];
-                    }
-                }
-                break;
-        }
-    }
-
-    return mutated;
-}
-
 function diffSnapshots(oldSnap, newSnap) {
     const changes = [];
 
@@ -147,8 +70,6 @@ function diffSnapshots(oldSnap, newSnap) {
 
 const detectChanges = async (req, res) => {
     try {
-        console.log(`[changes] DEMO_MODE: ${DEMO_MODE}`);
-
         const { data: allSnapshots, error: fetchError } = await supabase
             .from("snapshots")
             .select("*")
@@ -173,17 +94,12 @@ const detectChanges = async (req, res) => {
         const allDetails = [];
 
         for (const [key, snaps] of Object.entries(groups)) {
-            let latest = snaps[0];
+            const latest = snaps[0];
             const previous = snaps.length > 1 ? snaps[1] : null;
 
             if (!previous) {
                 console.log(`[changes] Only one snapshot for ${key}, skipping diff.`);
                 continue;
-            }
-
-            if (DEMO_MODE) {
-                console.log(`[changes] Applying demo mutations for ${key}`);
-                latest = applyDemoMutations(latest);
             }
 
             const changes = diffSnapshots(previous, latest);
@@ -204,7 +120,16 @@ const detectChanges = async (req, res) => {
                     .limit(1);
 
                 if (existing && existing.length > 0) {
-                    console.log(`[changes] Duplicate change skipped: ${change.field}`);
+                    console.log(`[changes] Existing change found for ${change.field}, adding to response`);
+                    allDetails.push({
+                        competitor_id: latest.competitor_id,
+                        source_id: latest.source_id,
+                        field: change.field,
+                        type: change.change_type,
+                        old_value: change.old_value ? String(change.old_value).substring(0, 100) : null,
+                        new_value: change.new_value ? String(change.new_value).substring(0, 100) : null,
+                        status: "existing"
+                    });
                     continue;
                 }
 
@@ -241,7 +166,6 @@ const detectChanges = async (req, res) => {
 
         res.status(200).json({
             changes_detected: allDetails.length,
-            demo_mode: DEMO_MODE,
             details: allDetails,
         });
 

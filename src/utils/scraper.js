@@ -1,7 +1,7 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
 
-const TIMEOUT = 10000;
+const TIMEOUT = 15000;
 
 async function fetchHTML(url) {
     const response = await axios.get(url, {
@@ -204,5 +204,79 @@ export async function scrapeDiscussions(url) {
         return { title, topics, comments };
     } catch (error) {
         return { error: `Failed to scrape discussions: ${error.message}` };
+    }
+}
+
+export async function scrapeChangelog(url) {
+    try {
+        const $ = await fetchHTML(url);
+
+        const title = $("title").text().trim() || null;
+        const headline = $("h1").first().text().trim() || null;
+
+        const features = [];
+        $("h2, h3").each((i, el) => {
+            const text = $(el).text().trim();
+            if (text && text.length > 3 && text.length < 200 && features.length < 20) {
+                features.push(text);
+            }
+        });
+
+        const details = [];
+        $("li").each((i, el) => {
+            const text = $(el).text().trim();
+            if (text.length > 10 && text.length < 300 && details.length < 15) {
+                details.push(text);
+            }
+        });
+
+        const content_snippets = [];
+        $("p").each((i, el) => {
+            const text = $(el).text().trim();
+            if (text.length > 30 && content_snippets.length < 10) {
+                content_snippets.push(text.substring(0, 500));
+            }
+        });
+
+        const bodyText = $("body").text().toLowerCase();
+        const words = bodyText.match(/\b[a-z]{4,}\b/g) || [];
+        const freq = {};
+        for (const w of words) {
+            if (!["this", "that", "with", "from", "have", "been", "more", "about", "their", "will", "your", "they", "what", "when", "which", "each", "than", "also", "into", "some", "would", "could", "other", "were", "there", "very", "just", "only", "most", "like", "over", "code", "using", "view", "setting"].includes(w)) {
+                freq[w] = (freq[w] || 0) + 1;
+            }
+        }
+        const keywords = Object.entries(freq)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 15)
+            .map(([word]) => word);
+
+        let pricing_text = null;
+        $("p, li, span, div").each((i, el) => {
+            const text = $(el).text().trim();
+            if (text.match(/\$\d+|free|pricing|plan/i) && !pricing_text) {
+                pricing_text = text.substring(0, 500);
+            }
+        });
+
+        const raw_text = [
+            headline,
+            ...features,
+            ...details.slice(0, 5),
+            ...content_snippets.slice(0, 3),
+        ].filter(Boolean).join(" ").substring(0, 5000);
+
+        return {
+            title,
+            headline,
+            features,
+            details,
+            keywords,
+            pricing_text,
+            content_snippets,
+            raw_text,
+        };
+    } catch (error) {
+        return { error: `Failed to scrape changelog: ${error.message}` };
     }
 }

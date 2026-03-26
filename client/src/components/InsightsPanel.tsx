@@ -1,58 +1,47 @@
 import { Card } from './ui/Card';
-import { BrainCircuit, Lightbulb } from 'lucide-react';
-import type { Insight } from '../types';
+import { BrainCircuit } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 interface InsightsPanelProps {
-  insights: Insight[];
+  report: string;
 }
 
-function getCategoryLabel(type: string): string {
-  const map: Record<string, string> = {
-    pricing: 'Pricing',
-    messaging: 'Messaging',
-    features: 'Features',
-    trend: 'Trend',
-  };
-  return map[type] || 'Insight';
-}
-
-export function InsightsPanel({ insights }: InsightsPanelProps) {
-  if (insights.length === 0) return null;
+export function InsightsPanel({ report }: InsightsPanelProps) {
+  if (!report) return null;
 
   return (
-    <section>
+    <section className="mb-12">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
           <BrainCircuit className="w-5 h-5 text-indigo-600" />
-          Strategic Insights
+          Insights & Recommendations
         </h2>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {insights.map((insight) => (
-          <Card key={insight.id} className="hover:border-indigo-200 transition-all group border-t-4 border-t-indigo-500">
-            <div className="flex flex-col h-full">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all">
-                  <Lightbulb className="w-4 h-4" />
-                </div>
-                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest">
-                  {getCategoryLabel(insight.insight_type)}
-                </span>
-              </div>
-              <p className="text-sm text-slate-700 font-medium leading-relaxed mb-6 flex-1 italic">
-                "{insight.insight_text}"
-              </p>
-              <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                  {insight.competitorName || 'Competitor'}
-                </span>
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-bold text-indigo-500">Score: {(insight.score * 100).toFixed(0)}%</span>
-                </div>
-              </div>
-            </div>
-          </Card>
-        ))}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden border-t-4 border-t-indigo-500">
+        <div className="p-8">
+          <div className="max-w-none text-slate-700">
+            <ReactMarkdown
+              components={{
+                h1: ({node, ...props}) => <h1 className="text-2xl font-black text-slate-900 mb-6 tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-indigo-400" {...props} />,
+                h2: ({node, ...props}) => <h2 className="text-xl font-bold text-indigo-950 mt-10 mb-5 tracking-tight border-b border-indigo-100 pb-2 flex items-center gap-2" {...props} />,
+                h3: ({node, ...props}) => <h3 className="text-lg font-bold text-slate-800 mt-8 mb-4 tracking-tight" {...props} />,
+                p: ({node, ...props}) => <p className="leading-relaxed mb-6 text-[15px]" {...props} />,
+                ul: ({node, ...props}) => <ul className="pl-2 mb-8 space-y-3" {...props} />,
+                ol: ({node, ...props}) => <ol className="list-decimal pl-6 mb-8 space-y-3 font-medium text-[15px]" {...props} />,
+                li: ({node, ...props}) => (
+                  <li className="text-[15px] flex items-start relative group">
+                    <span className="text-indigo-400 mr-3 mt-1.5 leading-none shrink-0">•</span>
+                    <span className="group-hover:text-slate-900 transition-colors leading-relaxed">{props.children}</span>
+                  </li>
+                ),
+                strong: ({node, ...props}) => <strong className="font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md" {...props} />,
+                blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-indigo-500 pl-5 py-3 my-6 bg-gradient-to-r from-indigo-50/80 to-transparent italic text-slate-700 rounded-r-xl shadow-sm" {...props} />,
+              }}
+            >
+              {report}
+            </ReactMarkdown>
+          </div>
+        </div>
       </div>
     </section>
   );

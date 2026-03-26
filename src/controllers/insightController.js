@@ -2,29 +2,7 @@ import axios from "axios";
 import supabase from "../db/supabase.js";
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const LLM_MODEL = "llama-3.1-8b-instant";
-
-function extractJSON(text) {
-    try {
-        return JSON.parse(text);
-    } catch {}
-
-    let cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-    try {
-        return JSON.parse(cleaned);
-    } catch {}
-
-    const firstBrace = cleaned.indexOf("{");
-    const lastBrace = cleaned.lastIndexOf("}");
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-        const jsonStr = cleaned.substring(firstBrace, lastBrace + 1);
-        try {
-            return JSON.parse(jsonStr);
-        } catch {}
-    }
-
-    return null;
-}
+const LLM_MODEL = "llama-3.3-70b-versatile";
 
 async function callLLM(prompt, retries = 1) {
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -34,7 +12,7 @@ async function callLLM(prompt, retries = 1) {
                 {
                     model: LLM_MODEL,
                     messages: [{ role: "user", content: prompt }],
-                    temperature: 0.4,
+                    temperature: 0.5,
                 },
                 {
                     headers: {
@@ -48,11 +26,7 @@ async function callLLM(prompt, retries = 1) {
             const content = response.data.choices?.[0]?.message?.content?.trim();
             if (!content) throw new Error("Empty LLM response");
 
-            console.log(`[LLM] Raw response (attempt ${attempt + 1}):`, content.substring(0, 300));
-
-            const parsed = extractJSON(content);
-            if (!parsed) throw new Error("Could not extract valid JSON from response");
-            return parsed;
+            return content;
         } catch (error) {
             const errMsg = error.response
                 ? `API error ${error.response.status}: ${JSON.stringify(error.response.data).substring(0, 300)}`
@@ -76,7 +50,8 @@ const generateInsights = async (req, res) => {
         const { data: changes, error: changesErr } = await supabase
             .from("changes")
             .select("*")
-            .order("detected_at", { ascending: false });
+            .order("detected_at", { ascending: false })
+            .limit(50);
 
         if (changesErr) {
             console.error("Error fetching changes:", changesErr.message);
@@ -105,7 +80,7 @@ const generateInsights = async (req, res) => {
             });
         }
 
-        const formattedTrends = (trends || []).map(t => ({
+        const formattedTrends = (trends || []).slice(0, 5).map(t => ({
             keyword: t.keyword,
             frequency: t.frequency,
             trend_direction: t.trend_direction,
@@ -115,124 +90,43 @@ const generateInsights = async (req, res) => {
             .from("competitors")
             .select("id, name");
 
-        const competitorIds = [...new Set([
-            ...Object.keys(changesByCompetitor),
-            ...(allCompetitors || []).map(c => c.id),
-        ])];
+        const DEMO_MODE = process.env.DEMO_MODE === "true";
 
-        let insightsCreated = 0;
-        let recommendationsCreated = 0;
+        let relevantCompetitors = (allCompetitors || []).filter(c => changesByCompetitor[c.id]);
 
-        for (const competitorId of competitorIds) {
-            const competitorChanges = changesByCompetitor[competitorId] || [];
-            const competitorName = allCompetitors?.find(c => c.id === competitorId)?.name || "Unknown";
+        if (DEMO_MODE) {
+            relevantCompetitors = (allCompetitors || []).filter(c => c.name === "Antigravity" || c.name === "VS Code");
+            
+            const validIds = relevantCompetitors.map(c => c.id);
+            Object.keys(changesByCompetitor).forEach(id => {
+                if (!validIds.includes(id)) {
+                    delete changesByCompetitor[id];
+                }
+            });
+        }
 
-            const insightPrompt = `Generate a concise business insight based on the provided competitor data.
+        const prompt = `You are a concise strategic business analyst. Write a extremely brief "Insights and Recommendations" summary (maximum 3-4 short sentences) based on the following competitor data.
 
-COMPETITOR: ${competitorName}
-CHANGES: ${JSON.stringify(competitorChanges)}
-TRENDS: ${JSON.stringify(formattedTrends)}
+COMPETITORS: ${relevantCompetitors.map(c => c.name).join(", ")}
+CHANGES DETECTED: ${JSON.stringify(changesByCompetitor).substring(0, 2000)}
+MARKET TRENDS: ${JSON.stringify(formattedTrends)}
 
-IMPORTANT:
-- Return STRICT JSON only
-- No markdown
-- No explanations
-- No extra text
+CRITICAL INSTRUCTIONS:
+- Write exactly one short paragraph for **Insights:** and exactly one bullet point for **Recommendation:**.
+- Mention specific features that were updated.
+- DO NOT use large markdown headings like # or ##.
+- Be extremely brief and punchy. No generic fluff.`;
 
-FORMAT:
-{
-  "insight_text": "...",
-  "insight_type": "...",
-  "score": 0.0
-}
+        console.log(`[insights] Generating overall market report...`);
+        const markdownReport = await callLLM(prompt);
 
-RULES:
-- insight_text must explain WHAT is happening and WHY it matters
-- insight_type must be one of: pricing, messaging, features, trend
-- score must be between 0 and 1 based on importance`;
-
-            console.log(`[insights] Generating insight for ${competitorName}...`);
-            const insight = await callLLM(insightPrompt);
-
-            if (!insight || !insight.insight_text || !insight.insight_type) {
-                console.error(`[insights] Invalid insight for ${competitorName}, skipping.`);
-                continue;
-            }
-
-            insight.score = Math.max(0, Math.min(1, parseFloat(insight.score) || 0.5));
-
-            const { data: insertedInsight, error: insightErr } = await supabase
-                .from("insights")
-                .insert([{
-                    competitor_id: competitorId,
-                    insight_text: insight.insight_text,
-                    insight_type: insight.insight_type,
-                    score: insight.score,
-                }])
-                .select()
-                .single();
-
-            if (insightErr) {
-                console.error(`[insights] Error storing insight for ${competitorName}:`, insightErr.message);
-                continue;
-            }
-
-            insightsCreated++;
-            console.log(`[insights] Insight stored for ${competitorName}: ${insight.insight_type}`);
-
-            const recPrompt = `Generate an actionable recommendation based on the given insight.
-
-INSIGHT: ${insight.insight_text}
-CONTEXT:
-- Changes: ${JSON.stringify(competitorChanges)}
-- Trends: ${JSON.stringify(formattedTrends)}
-
-IMPORTANT:
-- Return STRICT JSON only
-- No markdown
-- No explanations
-
-FORMAT:
-{
-  "recommendation_text": "...",
-  "priority": 0.0
-}
-
-RULES:
-- recommendation must be actionable
-- priority must be between 0 and 1
-- Higher priority for strong trends or major changes`;
-
-            console.log(`[insights] Generating recommendation for ${competitorName}...`);
-            const rec = await callLLM(recPrompt);
-
-            if (!rec || !rec.recommendation_text) {
-                console.error(`[insights] Invalid recommendation for ${competitorName}, skipping.`);
-                continue;
-            }
-
-            rec.priority = Math.max(0, Math.min(1, parseFloat(rec.priority) || 0.5));
-
-            const { error: recErr } = await supabase
-                .from("recommendations")
-                .insert([{
-                    insight_id: insertedInsight.id,
-                    recommendation_text: rec.recommendation_text,
-                    priority: rec.priority,
-                }]);
-
-            if (recErr) {
-                console.error(`[insights] Error storing recommendation:`, recErr.message);
-            } else {
-                recommendationsCreated++;
-                console.log(`[insights] Recommendation stored for ${competitorName}`);
-            }
+        if (!markdownReport) {
+            return res.status(500).json({ error: "Failed to generate report from LLM." });
         }
 
         res.status(200).json({
             status: "success",
-            insights_created: insightsCreated,
-            recommendations_created: recommendationsCreated,
+            report: markdownReport
         });
 
     } catch (error) {

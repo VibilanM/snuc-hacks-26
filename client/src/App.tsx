@@ -4,7 +4,6 @@ import { CompetitorGrid } from './components/CompetitorGrid';
 import { ChangesFeed } from './components/ChangesFeed';
 import { InsightsPanel } from './components/InsightsPanel';
 import { TrendsChart } from './components/TrendsChart';
-import { RecommendationsList } from './components/RecommendationsList';
 import { BarChart3, Loader2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { runPipeline } from './api';
@@ -18,8 +17,7 @@ export default function App() {
 
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [changes, setChanges] = useState<ChangeRecord[]>([]);
-  const [insights, setInsights] = useState<Insight[]>([]);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
+  const [marketReport, setMarketReport] = useState<string | null>(null);
   const [trends, setTrends] = useState<TrendData[]>([]);
 
   const handleSearch = async (organisationName: string, industry: string, product: string) => {
@@ -39,7 +37,7 @@ export default function App() {
 
       const competitorList: Competitor[] = (result.searchResult?.competitors || []).map(
         (c: any, i: number) => ({
-          id: String(i),
+          id: c.id || String(i),
           name: c.name,
           industry,
           domain: product,
@@ -53,24 +51,17 @@ export default function App() {
       const changeList: ChangeRecord[] = (result.changesResult?.details || []).map(
         (ch: any) => ({
           ...ch,
-          competitorName: competitorList.find(c =>
-            c.name.toLowerCase().includes(ch.competitor_id?.substring(0, 4)?.toLowerCase() || '')
-          )?.name || ch.competitor_id?.substring(0, 8),
+          competitorName: competitorList.find(c => c.id === ch.competitor_id)?.name || ch.competitor_id?.substring(0, 8),
         })
       );
       setChanges(changeList);
 
-      setInsights([]);
-      setRecommendations([]);
+      setMarketReport(result.insightsResult?.report || null);
       setTrends([]);
 
       try {
         const BASE = '/api';
-        const [trendsRes, insightsRes, recsRes] = await Promise.all([
-          fetch(`${BASE}/normalize-data`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }).then(r => r.json()).catch(() => null),
-          fetchTable('insights'),
-          fetchTable('recommendations'),
-        ]);
+        const trendsRes = await fetch(`${BASE}/normalize-data`, { method: 'POST', headers: { 'Content-Type': 'application/json' } }).then(r => r.json()).catch(() => null);
 
         if (trendsRes?.trends) {
           setTrends(trendsRes.trends.map((t: any) => ({
@@ -79,19 +70,8 @@ export default function App() {
             trend_direction: t.trend_direction,
           })));
         }
-
-        if (insightsRes) {
-          setInsights(insightsRes.map((ins: any) => ({
-            ...ins,
-            competitorName: competitorList.find(c => c.name)?.name || 'Competitor',
-          })));
-        }
-
-        if (recsRes) {
-          setRecommendations(recsRes);
-        }
       } catch {
-        // Non-critical: trends/insights/recs may not be fetchable directly
+        // Non-critical: trends may not be fetchable directly
       }
 
       setHasResults(true);
@@ -169,8 +149,7 @@ export default function App() {
                 <TrendsChart trends={trends} />
               </div>
 
-              <InsightsPanel insights={insights} />
-              <RecommendationsList recommendations={recommendations} />
+              {marketReport && <InsightsPanel report={marketReport} />}
             </motion.div>
           ) : (
             <div key="empty" className="text-center py-20 border-2 border-dashed border-slate-200 rounded-3xl">
